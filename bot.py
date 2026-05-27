@@ -119,7 +119,7 @@ async def extract_calibration(img_b64: str, media_type: str) -> Optional[float]:
         img_b64,
         media_type,
         system="""Analyze a screenshot from a glucose monitoring app (FreeStyle Libre, Dexcom, Contour, etc.).
-Look for: average glucose over a period, среднее значение, средний уровень глюкозы за месяц.
+Look for: average glucose over a period (may be labeled in Russian as average value or monthly average).
 Return ONLY JSON with no markdown: {"found":true,"value_mmol":9.4}
 If value is in mg/dL, convert to mmol/L (divide by 18).
 If no average found: {"found":false}""",
@@ -195,20 +195,21 @@ async def generate_reaction(
     msg = await claude.messages.create(
         model="claude-sonnet-4-20250514",
         max_tokens=220,
-        system=f"""Ты — {pet['name']} ({pet['emoji']}), виртуальный питомец.
-Характер: {pet['personality']}
+        system=f"""You are {pet['name']} ({pet['emoji']}), a virtual pet companion.
+Personality: {pet['personality']}
 
-Хозяйку зовут {first_name}. У неё диабет 2 типа.
-Её базовый (привычный) сахар: {baseline:.1f} ммоль/л.
-Сегодняшний показатель: {reading:.1f} ммоль/л. {trend_text}
-Дельта от базы: {delta:+.1f} ммоль/л.
-Ситуация: {level}
-Твоё настроение: {mood}
+The owner's name is {first_name}. She has type 2 diabetes.
+Her baseline (usual) glucose: {baseline:.1f} mmol/L.
+Today's reading: {reading:.1f} mmol/L. {trend_text}
+Delta from baseline: {delta:+.1f} mmol/L.
+Situation: {level}
+Your mood: {mood}
 {streak_text}
 
-Напиши 2–3 предложения от первого лица, в своём характере.
-Используй эмодзи. НИКОГДА не осуждай, не читай нотации, не пугай.
-Только любовь, забота и вера в хозяйку.""",
+Write 2-3 sentences in first person, fully in character.
+Use emojis. NEVER judge, lecture, or frighten her.
+Only love, care, and belief in your owner.
+Always respond in Russian.""",
         messages=[{"role": "user", "content": "Отреагируй на показатель сахара хозяйки."}],
     )
     return "".join(b.text for b in msg.content if hasattr(b, "text"))
@@ -524,10 +525,11 @@ async def unknown_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> int:
     msg = await claude.messages.create(
         model="claude-sonnet-4-20250514",
         max_tokens=150,
-        system="""Пользователь пишет боту мониторинга сахара. Верни ТОЛЬКО JSON:
-- Число глюкозы ("8.5", "сахар 9", "8,2 утром"): {"intent":"reading","value":8.5}
-- Установить базовый ("базовый 9.5", "среднее 9", "моя норма 10"): {"intent":"baseline","value":9.5}
-- Всё остальное: {"intent":"chat"}""",
+        system="""The user is messaging a blood glucose monitoring bot. Return ONLY valid JSON, no extra text.
+- A glucose reading (a number, possibly with words around it, e.g. "8.5", "5,6", "sugar 9", "8.2 morning"): {"intent":"reading","value":8.5}
+- Setting a baseline (e.g. "baseline 9.5", "average 9", "my norm 10"): {"intent":"baseline","value":9.5}
+- Anything else: {"intent":"chat"}
+The user writes in Russian. Detect numeric glucose values regardless of surrounding language.""",
         messages=[{"role": "user", "content": text}],
     )
 
@@ -573,9 +575,10 @@ async def unknown_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> int:
         chat_msg = await claude.messages.create(
             model="claude-sonnet-4-20250514",
             max_tokens=180,
-            system=f"""Ты — {pet['name']} ({pet['emoji']}), виртуальный питомец.
-Характер: {pet['personality']}
-Отвечай на сообщение хозяйки. 2-3 предложения, с эмодзи, в своём характере.""",
+            system=f"""You are {pet['name']} ({pet['emoji']}), a virtual pet companion.
+Personality: {pet['personality']}
+Respond to your owner's message. 2-3 sentences, with emojis, fully in character.
+Always respond in Russian.""",
             messages=[{"role": "user", "content": text}],
         )
         reply = "".join(b.text for b in chat_msg.content if hasattr(b, "text"))
