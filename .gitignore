@@ -47,3 +47,16 @@ Thumbs.db
 # Replit
 .cache/
 .local/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.pythonlibs/
+*.egg-info/
+.eggs/
+.env
+
+# Bot runtime files
+glucopet.db
+glucopet_states.pkl
