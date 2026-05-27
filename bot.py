@@ -10,6 +10,7 @@ import base64
 import json
 import logging
 import os
+import traceback
 from datetime import date, timedelta
 from typing import Optional
 
@@ -96,7 +97,7 @@ async def save_user(user_id: int, **fields):
 
 # ─── Claude API ───────────────────────────────────────────────────────────────
 
-async def _call_claude_vision(img_b64: str, system: str, prompt: str) -> str:
+async def _call_claude_vision(img_b64: str, media_type: str, system: str, prompt: str) -> str:
     """Базовый вызов Claude с изображением."""
     msg = await claude.messages.create(
         model="claude-sonnet-4-20250514",
@@ -105,7 +106,7 @@ async def _call_claude_vision(img_b64: str, system: str, prompt: str) -> str:
         messages=[{
             "role": "user",
             "content": [
-                {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": img_b64}},
+                {"type": "image", "source": {"type": "base64", "media_type": media_type, "data": img_b64}},
                 {"type": "text", "text": prompt},
             ],
         }],
@@ -113,16 +114,17 @@ async def _call_claude_vision(img_b64: str, system: str, prompt: str) -> str:
     return "".join(b.text for b in msg.content if hasattr(b, "text"))
 
 
-async def extract_calibration(img_b64: str) -> Optional[float]:
+async def extract_calibration(img_b64: str, media_type: str) -> Optional[float]:
     """Извлечь средний уровень глюкозы с калибровочного скрина."""
     text = await _call_claude_vision(
         img_b64,
-        system="""Анализируй скриншот из приложения мониторинга глюкозы (FreeStyle Libre, Dexcom, Contour и др.).
-Ищи: средний уровень глюкозы за период, average glucose, среднее значение, среднее за месяц.
-Верни ТОЛЬКО JSON без markdown: {"found":true,"value_mmol":9.4}
-Если в мг/дл — переведи в ммоль/л (разделить на 18).
-Если не нашёл среднее значение: {"found":false}""",
-        prompt="Найди средний уровень глюкозы за период.",
+        media_type,
+        system="""Analyze a screenshot from a glucose monitoring app (FreeStyle Libre, Dexcom, Contour, etc.).
+Look for: average glucose over a period, среднее значение, средний уровень глюкозы за месяц.
+Return ONLY JSON with no markdown: {"found":true,"value_mmol":9.4}
+If value is in mg/dL, convert to mmol/L (divide by 18).
+If no average found: {"found":false}""",
+        prompt="Find the average glucose level for the period.",
     )
     try:
         data = json.loads(text.replace("```json", "").replace("```", "").strip())
@@ -131,16 +133,17 @@ async def extract_calibration(img_b64: str) -> Optional[float]:
         return None
 
 
-async def extract_reading(img_b64: str) -> Optional[dict]:
+async def extract_reading(img_b64: str, media_type: str) -> Optional[dict]:
     """Извлечь текущее показание глюкозы с ежедневного скрина."""
     text = await _call_claude_vision(
         img_b64,
-        system="""Анализируй скриншот с текущим уровнем сахара в крови.
-Верни ТОЛЬКО JSON без markdown:
+        media_type,
+        system="""Analyze a screenshot showing a current blood glucose reading.
+Return ONLY JSON with no markdown:
 {"found":true,"value_mmol":8.2,"trend":"up"/"down"/"stable"/"unknown"}
-Если в мг/дл — переведи (разделить на 18).
-Если не нашёл показание: {"found":false}""",
-        prompt="Найди текущий уровень глюкозы.",
+If value is in mg/dL, convert to mmol/L (divide by 18).
+If no reading found: {"found":false}""",
+        prompt="Find the current glucose level.",
     )
     try:
         data = json.loads(text.replace("```json", "").replace("```", "").strip())
@@ -222,11 +225,24 @@ def pet_stage(total_good: int) -> str:
         return "мудрец ✨"
 
 
-async def photo_to_b64(update: Update) -> str:
+def _detect_media_type(raw: bytes) -> str:
+    if raw[:8] == b'\x89PNG\r\n\x1a\n':
+        return "image/png"
+    if raw[:2] == b'\xff\xd8':
+        return "image/jpeg"
+    if raw[:4] == b'GIF8':
+        return "image/gif"
+    if raw[:4] == b'RIFF' and raw[8:12] == b'WEBP':
+        return "image/webp"
+    return "image/jpeg"
+
+
+async def photo_to_b64(update: Update) -> tuple[str, str]:
     photo = update.message.photo[-1]
     file = await photo.get_file()
-    raw = await file.download_as_bytearray()
-    return base64.b64encode(raw).decode()
+    raw = bytes(await file.download_as_bytearray())
+    media_type = _detect_media_type(raw)
+    return base64.b64encode(raw).decode("ascii"), media_type
 
 
 # ─── Хэндлеры ────────────────────────────────────────────────────────────────
@@ -307,10 +323,11 @@ async def calibration_photo(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> i
     thinking = await update.message.reply_text(f"{pet['emoji']} Смотрю на скрин...")
 
     try:
-        img_b64 = await photo_to_b64(update)
-        baseline = await extract_calibration(img_b64)
+        img_b64, media_type = await photo_to_b64(update)
+        logger.info(f"Calibration photo: media_type={media_type}, b64_len={len(img_b64)}")
+        baseline = await extract_calibration(img_b64, media_type)
     except Exception as e:
-        logger.error(f"Calibration error: {e}")
+        logger.error(f"Calibration error: {e}\n{traceback.format_exc()}")
         baseline = None
 
     if not baseline:
@@ -382,10 +399,11 @@ async def daily_photo(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> int:
     thinking = await update.message.reply_text(f"{pet['emoji']} Смотрю...")
 
     try:
-        img_b64 = await photo_to_b64(update)
-        reading_data = await extract_reading(img_b64)
+        img_b64, media_type = await photo_to_b64(update)
+        logger.info(f"Reading photo: media_type={media_type}, b64_len={len(img_b64)}")
+        reading_data = await extract_reading(img_b64, media_type)
     except Exception as e:
-        logger.error(f"Reading error: {e}")
+        logger.error(f"Reading error: {e}\n{traceback.format_exc()}")
         reading_data = None
 
     if not reading_data:
