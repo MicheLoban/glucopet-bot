@@ -25,7 +25,6 @@ from telegram.ext import (
     ConversationHandler,
     ContextTypes,
     MessageHandler,
-    PicklePersistence,
     filters,
 )
 
@@ -586,8 +585,7 @@ async def unknown_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> int:
 async def main():
     await init_db()
 
-    persistence = PicklePersistence(filepath="glucopet_states.pkl")
-    app = Application.builder().token(BOT_TOKEN).persistence(persistence).build()
+    app = Application.builder().token(BOT_TOKEN).build()
 
     conv = ConversationHandler(
         entry_points=[CommandHandler("start", cmd_start)],
@@ -613,8 +611,6 @@ async def main():
             CommandHandler("start", cmd_start),
             CommandHandler("newpet", cmd_newpet),
         ],
-        name="main_conv",
-        persistent=True,
         allow_reentry=True,
     )
 
