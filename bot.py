@@ -167,28 +167,28 @@ async def generate_reaction(
     delta = reading - baseline
 
     if reading < 3.9:
-        level = "ТРЕВОГА: сахар очень низкий (гипогликемия) — нужно срочно поесть!"
-        mood = "испуган, тревожится, срочно просит поесть"
+        level = "ALERT: blood sugar is dangerously low (hypoglycemia) - she needs to eat urgently!"
+        mood = "scared and anxious, urgently asking her to eat right now"
     elif delta < -1.5:
-        level = "ВОСТОРГ: намного лучше обычного! Огромный прогресс!"
-        mood = "прыгает от счастья, в полном восторге"
+        level = "DELIGHT: much better than usual! Huge progress!"
+        mood = "jumping with joy, absolutely thrilled"
     elif delta < -0.5:
-        level = "РАДОСТЬ: лучше обычного, заметный прогресс"
-        mood = "очень доволен и рад"
+        level = "JOY: better than usual, noticeable progress"
+        mood = "very pleased and happy"
     elif delta <= 0.5:
-        level = "СПОКОЙСТВИЕ: примерно как обычно"
-        mood = "спокоен, с тихой надеждой"
+        level = "CALM: roughly as usual"
+        mood = "calm, with quiet hope"
     elif delta <= 1.5:
-        level = "ЛЁГКАЯ ГРУСТЬ: чуть выше обычного"
-        mood = "немного грустит, но не осуждает — верит, что завтра лучше"
+        level = "MILD SADNESS: slightly above usual"
+        mood = "a little sad but not judging - believes tomorrow will be better"
     else:
-        level = "ПЛОХО СЕБЯ ЧУВСТВУЕТ: значительно выше обычного"
-        mood = "плохо себя чувствует, переживает, но не злится и не осуждает"
+        level = "UNWELL: significantly above usual"
+        mood = "feeling unwell and worried, but not angry or judgmental"
 
-    trend_text = {"up": "сахар сейчас растёт", "down": "сахар снижается", "stable": "сахар стабилен"}.get(trend, "")
+    trend_text = {"up": "glucose is rising", "down": "glucose is dropping", "stable": "glucose is stable"}.get(trend, "")
     streak_text = (
-        f"Это {streak}-й день подряд, когда {first_name} присылает показатели — "
-        f"обязательно отметь её постоянство и поблагодари!"
+        f"This is day {streak} in a row that {first_name} has shared her reading — "
+        f"acknowledge her consistency and thank her!"
         if streak >= 3 else ""
     )
 
