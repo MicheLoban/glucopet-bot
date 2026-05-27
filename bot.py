@@ -490,18 +490,77 @@ async def cmd_newpet(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> int:
 
 
 async def unknown_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> int:
-    db_user = await get_user(update.effective_user.id)
+    user_id = update.effective_user.id
+    db_user = await get_user(user_id)
+
     if not db_user or not db_user.get("pet_type"):
         await update.message.reply_text("Напиши /start чтобы начать!")
         return ConversationHandler.END
 
     pet = PETS.get(db_user["pet_type"], PETS["bear"])
-    await update.message.reply_text(
-        f"{pet['emoji']} Пришли мне скрин с сахаром, и я расскажу как себя чувствую! 📸"
+    text = update.message.text
+
+    msg = await claude.messages.create(
+        model="claude-sonnet-4-20250514",
+        max_tokens=150,
+        system="""Пользователь пишет боту мониторинга сахара. Верни ТОЛЬКО JSON:
+- Число глюкозы ("8.5", "сахар 9", "8,2 утром"): {"intent":"reading","value":8.5}
+- Установить базовый ("базовый 9.5", "среднее 9", "моя норма 10"): {"intent":"baseline","value":9.5}
+- Всё остальное: {"intent":"chat"}""",
+        messages=[{"role": "user", "content": text}],
     )
-    return {"new": CHOOSING_PET, "calibrating": CALIBRATING, "active": ACTIVE}.get(
-        db_user.get("state", "active"), ACTIVE
-    )
+
+    try:
+        raw = "".join(b.text for b in msg.content if hasattr(b, "text"))
+        data = json.loads(raw.replace("```json","").replace("```","").strip())
+    except Exception:
+        data = {"intent": "chat"}
+
+    if data["intent"] == "reading" and db_user.get("baseline"):
+        val = float(data["value"])
+        thinking = await update.message.reply_text(f"{pet['emoji']} Смотрю...")
+        today = str(date.today())
+        yesterday = str(date.today() - timedelta(days=1))
+        streak = db_user.get("streak", 0)
+        last_date = db_user.get("last_date", "")
+        if last_date == yesterday:
+            streak += 1
+        elif last_date != today:
+            streak = 1
+        total_good = db_user.get("total_good", 0)
+        if val < db_user["baseline"] and val >= 3.9 and last_date != today:
+            total_good += 1
+        await save_user(user_id, streak=streak, last_date=today, total_good=total_good)
+        reaction = await generate_reaction(
+            db_user["pet_type"], db_user["baseline"], val,
+            "unknown", streak, db_user.get("first_name", "хозяйка"),
+        )
+        t = f"*{val:.1f} ммоль/л*\n\n{reaction}"
+        if streak >= 3 and last_date != today:
+            t += f"\n\n🔥 *{streak} дня подряд!*"
+        await thinking.edit_text(t, parse_mode="Markdown")
+
+    elif data["intent"] == "baseline":
+        val = float(data["value"])
+        await save_user(user_id, baseline=round(val, 1), state="active")
+        await update.message.reply_text(
+            f"{pet['emoji']} Запомнил! Базовый сахар: *{val:.1f} ммоль/л*\n\nТеперь присылай скрины или просто пиши цифру 📸",
+            parse_mode="Markdown",
+        )
+
+    else:
+        chat_msg = await claude.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=180,
+            system=f"""Ты — {pet['name']} ({pet['emoji']}), виртуальный питомец.
+Характер: {pet['personality']}
+Отвечай на сообщение хозяйки. 2-3 предложения, с эмодзи, в своём характере.""",
+            messages=[{"role": "user", "content": text}],
+        )
+        reply = "".join(b.text for b in chat_msg.content if hasattr(b, "text"))
+        await update.message.reply_text(reply)
+
+    return ACTIVE
 
 
 # ─── Запуск ───────────────────────────────────────────────────────────────────
