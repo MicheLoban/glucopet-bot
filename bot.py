@@ -582,11 +582,9 @@ async def unknown_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> int:
 
 # ─── Запуск ───────────────────────────────────────────────────────────────────
 
-async def main():
-    await init_db()
-
+def main():
+    asyncio.run(init_db())
     app = Application.builder().token(BOT_TOKEN).build()
-
     conv = ConversationHandler(
         entry_points=[CommandHandler("start", cmd_start)],
         states={
@@ -613,16 +611,10 @@ async def main():
         ],
         allow_reentry=True,
     )
-
     app.add_handler(conv)
-
-    logger.info("🐾 GlucoPet Bot запущен!")
-    async with app:
-        await app.initialize()
-        await app.start()
-        await app.updater.start_polling(allowed_updates=Update.ALL_TYPES)
-        await asyncio.Event().wait()
+    logger.info("GlucoPet Bot started!")
+    app.run_polling(allowed_updates=Update.ALL_TYPES)
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
