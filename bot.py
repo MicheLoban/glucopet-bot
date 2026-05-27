@@ -144,10 +144,13 @@ If value is in mg/dL, convert to mmol/L (divide by 18).
 If no reading found: {"found":false}""",
         prompt="Find the current glucose level.",
     )
+    print(f"[extract_reading] Claude raw response: {text!r}")
     try:
         data = json.loads(text.replace("```json", "").replace("```", "").strip())
+        print(f"[extract_reading] Parsed data: {data}")
         return data if data.get("found") else None
-    except Exception:
+    except Exception as e:
+        print(f"[extract_reading] JSON parse error: {e!r}  raw={text!r}")
         return None
 
 
@@ -401,6 +404,7 @@ async def daily_photo(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> int:
         img_b64, media_type = await photo_to_b64(update)
         logger.info(f"Reading photo: media_type={media_type}, b64_len={len(img_b64)}")
         reading_data = await extract_reading(img_b64, media_type)
+        print(f"[daily_photo] extract_reading returned: {reading_data}")
     except Exception as e:
         logger.error(f"Reading error: {e}\n{traceback.format_exc()}")
         reading_data = None
