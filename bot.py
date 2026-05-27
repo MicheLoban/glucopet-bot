@@ -506,8 +506,8 @@ async def unknown_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> int:
 
 # ─── Запуск ───────────────────────────────────────────────────────────────────
 
-def main():
-    asyncio.run(init_db())
+async def main():
+    await init_db()
 
     persistence = PicklePersistence(filepath="glucopet_states.pkl")
     app = Application.builder().token(BOT_TOKEN).persistence(persistence).build()
@@ -544,8 +544,12 @@ def main():
     app.add_handler(conv)
 
     logger.info("🐾 GlucoPet Bot запущен!")
-    app.run_polling(allowed_updates=Update.ALL_TYPES)
+    async with app:
+        await app.initialize()
+        await app.start()
+        await app.updater.start_polling(allowed_updates=Update.ALL_TYPES)
+        await asyncio.Event().wait()
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
