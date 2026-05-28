@@ -783,7 +783,7 @@ def main():
 
     app.add_handler(conv)
     logger.info("GlucoPet Bot started!")
-    app.run_polling(allowed_updates=Update.ALL_TYPES, drop_pending_updates=True)
+    app.run_polling(allowed_updates=Update.ALL_TYPES)
 
 
 if __name__ == "__main__":
